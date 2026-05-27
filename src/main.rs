@@ -49,7 +49,8 @@ fn main() -> anyhow::Result<()> {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: window_title,
+                        title: window_title.clone(),
+                        name: Some(window_title),
                         resolution: WindowResolution::new(
                             app_config.window.width,
                             app_config.window.height,
