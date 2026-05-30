@@ -16,7 +16,8 @@ Inspired by TempleOS | Built with Rust & Ratatui
 </div>
 
 ["Rodent-obsessed developer creates Ratty to bring 3D graphics to the command line"](https://www.theregister.com/software/2026/05/11/ratty-terminal-emulator-brings-3d-graphics-to-the-command-line/5238299) - The Register  
-["This New Terminal is Absurd (But Totally Fun)"](https://itsfoss.com/ratty-terminal/) - It's FOSS
+["This New Terminal is Absurd (But Totally Fun)"](https://itsfoss.com/ratty-terminal/) - It's FOSS  
+["10 weird OSS projects you need right now... "](https://www.youtube.com/watch?v=qPuzWFvRajk) - Fireship
 
 ## Features
 
