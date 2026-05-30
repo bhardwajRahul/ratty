@@ -30,7 +30,13 @@ pacman -S ratty
 
 Or download binary releases:
 
-TODO
+| File                                                                                                                                     | Platform            | Checksum                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| [ratty-aarch64-apple-darwin.tar.xz](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-aarch64-apple-darwin.tar.xz)           | Apple Silicon macOS | [checksum](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-aarch64-apple-darwin.tar.xz.sha256)      |
+| [ratty-x86_64-apple-darwin.tar.xz](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-apple-darwin.tar.xz)             | Intel macOS         | [checksum](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-apple-darwin.tar.xz.sha256)       |
+| [ratty-x86_64-pc-windows-msvc.zip](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-pc-windows-msvc.zip)             | x64 Windows         | [checksum](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-pc-windows-msvc.zip.sha256)       |
+| [ratty-aarch64-unknown-linux-gnu.tar.xz](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-aarch64-unknown-linux-gnu.tar.xz) | ARM64 Linux         | [checksum](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-aarch64-unknown-linux-gnu.tar.xz.sha256) |
+| [ratty-x86_64-unknown-linux-gnu.tar.xz](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-unknown-linux-gnu.tar.xz)   | x64 Linux           | [checksum](https://github.com/orhun/ratty/releases/download/v0.4.1/ratty-x86_64-unknown-linux-gnu.tar.xz.sha256)  |
 
 ### Features
 
