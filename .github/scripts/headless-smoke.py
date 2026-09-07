@@ -77,7 +77,10 @@ def capture(snapshot, output, name, config, command, *, scene=False, sends=(), a
     for value in sends:
         args.extend(("--send", value))
     args.extend(("--", *map(str, command)))
-    env = dict(os.environ, RUST_LOG="info", NO_COLOR="1", TERM="xterm-256color")
+    env = dict(os.environ, RUST_LOG="info", TERM="xterm-256color")
+    # NO_COLOR would also reach the PTY child and suppress the very colours
+    # these captures exercise. Strip log escape sequences only after capture.
+    env.pop("NO_COLOR", None)
     with log.open("w") as stream:
         stream.write(json.dumps(args) + "\n")
         stream.flush()
