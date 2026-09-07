@@ -2,7 +2,7 @@
 
 use base64::Engine as _;
 use ratatui_core::{
-    buffer::{Buffer, CellDiffOption},
+    buffer::{Buffer, CellDiffOption, CellWidth as _},
     layout::{Position, Rect},
     widgets::Widget,
 };
@@ -418,33 +418,59 @@ impl Widget for &RattyGraphic<'_> {
     }
 }
 
-/// Prepends `sequence` to the cell at `position` and marks the cell one
-/// column wide, so the escape bytes reach the terminal but never count as
+/// Prepends `sequence` to the cell at `position` and preserves its visible
+/// width, so the escape bytes reach the terminal but never count as
 /// display width in Ratatui's diff.
 ///
 /// Ratatui's backend prints a cell's symbol verbatim, which is how an escape
 /// sequence carried in a symbol reaches the terminal. Since `ratatui-core`
 /// 0.1.2 the diff derives a cell's width from its symbol string, and a base64
 /// image payload would be counted as thousands of columns, skipping every cell
-/// after it in the row. The forced width keeps the cell at the one column its
-/// visible symbol occupies (`ratatui-image` marks its placeholder cells the
-/// same way). A position outside the buffer is ignored.
+/// after it in the row. The forced width retains the columns occupied by the
+/// existing symbol, including wide glyphs and cells carrying earlier sequences.
+/// A position outside the buffer is ignored.
 pub fn emit_sequence(buf: &mut Buffer, position: impl Into<Position>, sequence: &str) {
     let Some(cell) = buf.cell_mut(position.into()) else {
         return;
     };
+    let width = core::num::NonZeroU16::new(cell.cell_width()).unwrap_or(core::num::NonZeroU16::MIN);
     let existing = cell.symbol();
     let mut symbol = String::with_capacity(sequence.len() + existing.len());
     symbol.push_str(sequence);
     symbol.push_str(existing);
     cell.set_symbol(&symbol);
-    cell.set_diff_option(CellDiffOption::ForcedWidth(core::num::NonZeroU16::MIN));
+    cell.set_diff_option(CellDiffOption::ForcedWidth(width));
 }
 
 #[cfg(test)]
 mod emit_sequence_tests {
     use super::*;
-    use ratatui_core::buffer::CellWidth as _;
+
+    #[test]
+    fn repeated_sequences_preserve_wide_glyphs_and_following_cells() {
+        for glyph in ["界", "🙂"] {
+            let area = Rect::new(0, 0, 3, 1);
+            let mut original = Buffer::empty(area);
+            original.set_string(0, 0, "abc", ratatui_core::style::Style::default());
+            let mut updated = Buffer::empty(area);
+            updated.set_string(
+                0,
+                0,
+                format!("{glyph}x"),
+                ratatui_core::style::Style::default(),
+            );
+            emit_sequence(&mut updated, (0, 0), "\x1b_x\x1b\\");
+            emit_sequence(&mut updated, (0, 0), "\x1b_y\x1b\\");
+
+            assert_eq!(updated[(0, 0)].cell_width(), 2);
+            let updates: Vec<_> = original
+                .diff(&updated)
+                .into_iter()
+                .map(|(x, y, _)| (x, y))
+                .collect();
+            assert_eq!(updates, vec![(0, 0), (2, 0)], "glyph {glyph}");
+        }
+    }
 
     #[test]
     fn escape_carrying_cell_stays_one_column_wide_in_the_diff() {

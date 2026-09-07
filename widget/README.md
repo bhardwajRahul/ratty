@@ -45,7 +45,7 @@ terminal region.
 To write one of the sequence strings (`register_sequence`, `place_sequence`,
 `update_sequence`, `delete_sequence`) into a buffer yourself, use
 `emit_sequence(buf, position, &sequence)`: it prepends the bytes to the cell's
-symbol and marks the cell one column wide so Ratatui's diff does not count the
+symbol and preserves its visible width so Ratatui's diff does not count the
 payload as display width.
 
 ## Payload Registration
