@@ -4693,6 +4693,7 @@ dependencies = [
  "bevy",
  "bevy_terminal_ratatui",
  "clap",
+ "compact_str",
  "etcetera",
  "image",
  "itoa",

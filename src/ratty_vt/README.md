@@ -33,6 +33,15 @@ subject, so the fork can be rebased onto a future upstream release.
   previous cell's cluster (spacing vowel signs, VS16, ZWJ sequences, flag
   pairs, keycaps) joins it, and the cell's width is the cluster's
   `unicode-width` string width, matching how Ratatui lays out cells.
+  Zero-width marks attached after cursor movement also update the cell's
+  width, so formatted output preserves its grid placement.
+- Cell text uses `CompactString` so long emoji and combining sequences are
+  preserved. On 64-bit targets a cell occupies 40 bytes, and text up to 24
+  bytes stays inline; longer clusters use heap storage. Each cell is limited
+  to 4096 UTF-8 bytes to bound memory and contextual Unicode processing.
+  Excess zero-width marks are discarded; a following spacing character
+  starts a new cell. Clustering checks the new boundary without allocating
+  a copy of the growing cell.
 - Resize reflows wrapped lines, moves lines between the screen and scrollback,
   and resets the DECSTBM scroll region.
 - Grids with a single row or column no longer panic on wide glyphs.

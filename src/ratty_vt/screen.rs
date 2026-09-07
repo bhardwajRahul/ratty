@@ -57,15 +57,17 @@ pub enum MouseProtocolEncoding {
     // Urxvt,
 }
 
-/// Whether printing `c` right after a cell holding `prev` continues that
-/// cell's grapheme cluster (see `Screen::extend_grapheme_cluster`).
+/// Whether `c` extends the final grapheme in a cell holding `prev` (see
+/// `Screen::extend_grapheme_cluster`). Legacy zero-width additions may leave
+/// earlier grapheme boundaries inside the cell; only the appended boundary
+/// determines whether the next character joins it.
 ///
 /// A Prepend-class format character (U+0600 ARABIC NUMBER SIGN and friends)
 /// clusters with whatever follows it under UAX #29, which would swallow an
 /// ordinary letter or space into the sign's cell; terminals keep those apart,
 /// so a cluster never grows past a Prepend character here.
 pub(crate) fn clusters_with(prev: &str, c: char) -> bool {
-    use unicode_segmentation::UnicodeSegmentation as _;
+    use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 
     let Some(last) = prev.chars().next_back() else {
         return false;
@@ -73,10 +75,23 @@ pub(crate) fn clusters_with(prev: &str, c: char) -> bool {
     if is_prepend(last) {
         return false;
     }
-    let mut cluster = String::with_capacity(prev.len() + 4);
-    cluster.push_str(prev);
-    cluster.push(c);
-    cluster.graphemes(true).count() == 1
+    // Ask only about the new boundary instead of copying and segmenting
+    // the entire growing cluster. Most marks need only the previous scalar;
+    // contextual rules borrow the existing text when the cursor requests it.
+    let mut encoded = [0; 4];
+    let next = c.encode_utf8(&mut encoded);
+    let mut cursor = GraphemeCursor::new(prev.len(), prev.len() + next.len(), true);
+    loop {
+        match cursor.is_boundary(next, prev.len()) {
+            Ok(boundary) => return !boundary,
+            Err(GraphemeIncomplete::PreContext(end)) => {
+                cursor.provide_context(&prev[..end], 0);
+            }
+            // Both chunks cover the complete string and the cursor points
+            // at the start of `next`, so other incomplete states cannot occur.
+            Err(_) => unreachable!("complete grapheme boundary context is available"),
+        }
+    }
 }
 
 /// Grapheme_Cluster_Break=Prepend (Unicode 16).
@@ -1143,12 +1158,29 @@ impl Screen {
     // Kitty and Ghostty (mode 2027) cluster the same way; this joins `c` to
     // the cell written just before it whenever the two form one grapheme
     // cluster, and widens that cell when the cluster's width becomes two.
+    // Zero-width marks also attach to the preceding cell after a cursor
+    // move, as the legacy combining path below does. Reconcile their width
+    // here as well so a late VS16 cannot leave a narrow emoji cell whose
+    // formatted replay becomes wide.
     fn extend_grapheme_cluster(&mut self, c: char) -> bool {
         use unicode_width::UnicodeWidthStr as _;
 
         let pos = self.grid().pos();
         let size = self.grid().size();
-        let Some(anchor) = self.last_print else {
+        let anchor = self.last_print.or_else(|| {
+            if c.width() != Some(0) || pos.col == 0 {
+                return None;
+            }
+            let mut anchor = crate::ratty_vt::grid::Pos {
+                row: pos.row,
+                col: pos.col - 1,
+            };
+            if self.grid().drawing_cell(anchor)?.is_wide_continuation() {
+                anchor.col = anchor.col.checked_sub(1)?;
+            }
+            Some(anchor)
+        });
+        let Some(anchor) = anchor else {
             return false;
         };
         if anchor.row != pos.row || pos.col == 0 {
@@ -1164,18 +1196,26 @@ impl Screen {
         if anchor.col + anchor_width != pos.col {
             return false;
         }
+        if !anchor_cell.can_append(c) {
+            // Keep overflow processing constant-time. Ignore additional
+            // marks; spacing characters start new cells instead of joining
+            // an incomplete stored prefix indefinitely.
+            self.last_print = None;
+            return c.width() == Some(0);
+        }
         if !clusters_with(anchor_cell.contents(), c) {
             return false;
         }
 
+        self.last_print = Some(anchor);
         let anchor_cell = self
             .grid_mut()
             .drawing_cell_mut(anchor)
             // checked above
             .unwrap();
         anchor_cell.append(c);
-        let new_width = anchor_cell.contents().width().clamp(1, 2) as u16;
-        if new_width == 2 && anchor_width == 1 {
+        // Width is sticky once a cell is wide; only narrow anchors can grow.
+        if anchor_width == 1 && anchor_cell.contents().width() >= 2 {
             // Widen: the cell under the cursor becomes the continuation half.
             if pos.col >= size.cols {
                 // The anchor sits in the last column with nothing to its
