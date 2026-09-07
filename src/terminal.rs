@@ -6,6 +6,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use bevy::prelude::*;
+use bevy::text::FontCx;
 use bevy_terminal_ratatui::RatatuiTerminal;
 use bevy_terminal_ratatui::prelude::{
     BlinkConfig, CellSizing, CursorConfig, CursorStyle, FontFaces, FontSizing, FontSource,
@@ -63,6 +64,26 @@ pub struct ConfiguredFontFaces {
     /// pushed to the renderer, which an embedder may build from a different
     /// `FontConfig` than the inserted `AppConfig`.
     pub(crate) system_family: Option<String>,
+}
+
+impl ConfiguredFontFaces {
+    /// Resolves the configured faces against Bevy's registered font families.
+    ///
+    /// Unavailable system families use the generic monospace family. Call
+    /// again after fonts register to recover the configured family. Explicit
+    /// font handles are retained so the renderer waits for their registration.
+    pub fn resolve(&self, font_cx: &mut FontCx) -> FontFaces {
+        if let Some(family) = self.system_family.as_deref()
+            && font_cx.collection.family_by_name(family).is_none()
+        {
+            warn_once!(
+                "configured font family {family:?} is unavailable; using the generic monospace family"
+            );
+            FontFaces::regular(FontSource::Monospace)
+        } else {
+            self.faces.clone()
+        }
+    }
 }
 
 /// Loads explicit font files into Bevy, or retains the configured system family.

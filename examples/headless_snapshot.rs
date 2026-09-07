@@ -23,7 +23,7 @@
 //! PTY step, shared), the `TerminalWidget` draw in
 //! `ratty::systems::render_terminal_widget` (`pump_and_draw` here), and the
 //! texture adoption in `ratty::systems::sync_terminal_render_output`
-//! (`on_ready` here). Scene mode runs Ratty's real plugin instead.
+//! (`adopt_texture` here). Scene mode runs Ratty's real plugin instead.
 //!
 //! Requires a GPU (Metal/Vulkan/DX12).
 
@@ -38,11 +38,13 @@ use bevy::render::RenderPlugin;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::{TextureFormat, TextureUsages};
 use bevy::render::settings::RenderCreation;
+use bevy::text::FontCx;
 use bevy::window::{PrimaryWindow, WindowResolution};
 use bevy::winit::WinitPlugin;
 use bevy_terminal_ratatui::TerminalRenderer;
 use bevy_terminal_ratatui::prelude::{
-    TerminalPlugin, TerminalReady, TerminalStats, TerminalSystems, TerminalTexture,
+    TerminalPlugin, TerminalReady, TerminalRemeasured, TerminalRenderConfig, TerminalStats,
+    TerminalSystems, TerminalTexture,
 };
 use clap::Parser;
 
@@ -51,7 +53,9 @@ use ratty::inline::TerminalInlineObjects;
 use ratty::mouse::TerminalSelection;
 use ratty::runtime::{RuntimeOptions, TerminalRuntime};
 use ratty::systems::drain_pty_output;
-use ratty::terminal::{TerminalSurface, TerminalWidget, load_configured_font_faces};
+use ratty::terminal::{
+    ConfiguredFontFaces, TerminalSurface, TerminalWidget, load_configured_font_faces,
+};
 
 #[derive(Parser)]
 struct Args {
@@ -285,12 +289,16 @@ fn send_input(
     }
     *next += 1;
     runtime.write_input(bytes);
+    if options.diagnose {
+        info!("sent PTY input {} of {}", *next, options.send.len());
+    }
 }
 
 #[derive(Resource, Default)]
 struct CaptureState {
     requested: bool,
     done: bool,
+    failed: bool,
 }
 
 /// The image every camera renders into in scene mode.
@@ -369,13 +377,13 @@ fn main() -> anyhow::Result<()> {
     .add_systems(Update, track_idle_frames.after(TerminalSystems::Sync))
     .add_systems(Update, send_input);
 
+    let font_faces = load_configured_font_faces(&mut app, &app_config.font)?;
+    app.insert_resource(font_faces);
     if args.scene {
         let size = UVec2::new(app_config.window.width, app_config.window.height);
-        let font_faces = load_configured_font_faces(&mut app, &app_config.font)?;
         app.insert_resource(app_config)
             .insert_resource(runtime)
             .insert_resource(terminal)
-            .insert_resource(font_faces)
             // Ratty's plugin expects a primary window. A `Window` entity with
             // no OS handle is ignored by the renderer but still provides the
             // logical size and scale the layout systems read.
@@ -392,7 +400,8 @@ fn main() -> anyhow::Result<()> {
             })
             .add_plugins(ratty::plugin::TerminalPlugin)
             .add_systems(PostStartup, retarget_cameras)
-            .add_systems(Update, request_scene_capture);
+            .add_systems(PostUpdate, hold_scene_until_capture)
+            .add_systems(Update, request_scene_capture.after(track_idle_frames));
     } else {
         app.add_plugins(TerminalPlugin)
             .insert_resource(app_config)
@@ -408,11 +417,20 @@ fn main() -> anyhow::Result<()> {
                 ));
             })
             .add_observer(on_ready)
-            .add_systems(Update, (pump_and_draw, request_texture_capture).chain());
+            .add_observer(on_remeasured)
+            .add_systems(
+                Update,
+                (sync_texture_font_config, pump_and_draw)
+                    .chain()
+                    .before(TerminalSystems::Sync),
+            )
+            .add_systems(Update, request_texture_capture.after(track_idle_frames));
     }
     app.add_systems(Update, exit_when_done);
-    app.run();
-    Ok(())
+    match app.run() {
+        AppExit::Success => Ok(()),
+        AppExit::Error(code) => anyhow::bail!("snapshot failed with exit code {code}"),
+    }
 }
 
 /// Points every camera at one off-screen image so the scene can be read back.
@@ -440,12 +458,36 @@ fn on_ready(
     textures: Query<&TerminalTexture>,
     mut terminal: ResMut<TerminalSurface>,
     mut runtime: ResMut<TerminalRuntime>,
+    mut gate: ResMut<CaptureGate>,
 ) {
     let Ok(texture) = textures.get(ready.entity) else {
         return;
     };
-    // Adopt measured metrics; keep the configured grid, just tell the child
-    // its pixel size.
+    adopt_texture(texture, &mut terminal, &mut runtime, &mut gate);
+}
+
+fn on_remeasured(
+    remeasured: On<TerminalRemeasured>,
+    textures: Query<&TerminalTexture>,
+    mut terminal: ResMut<TerminalSurface>,
+    mut runtime: ResMut<TerminalRuntime>,
+    mut gate: ResMut<CaptureGate>,
+) {
+    let Ok(texture) = textures.get(remeasured.entity) else {
+        return;
+    };
+    adopt_texture(texture, &mut terminal, &mut runtime, &mut gate);
+}
+
+/// Keep the configured grid while adopting the renderer's measured pixels,
+/// including later font registrations that change those measurements.
+fn adopt_texture(
+    texture: &TerminalTexture,
+    terminal: &mut TerminalSurface,
+    runtime: &mut TerminalRuntime,
+    gate: &mut CaptureGate,
+) {
+    gate.idle_frames = 0;
     terminal.update_render_output(texture);
     let logical =
         Vec2::new(terminal.cols as f32, terminal.rows as f32) * terminal.char_dimensions();
@@ -458,6 +500,20 @@ fn on_ready(
         "terminal ready: {}x{} cells, texture {:?}, cell {:?}",
         layout.cols, layout.rows, texture.size, texture.cell_size
     );
+}
+
+fn sync_texture_font_config(
+    faces: Res<ConfiguredFontFaces>,
+    mut font_cx: ResMut<FontCx>,
+    mut configs: Query<&mut TerminalRenderConfig, With<Target>>,
+) {
+    let Ok(mut config) = configs.single_mut() else {
+        return;
+    };
+    let resolved = faces.resolve(font_cx.bypass_change_detection());
+    if config.font != resolved {
+        config.font = resolved;
+    }
 }
 
 fn pump_and_draw(
@@ -489,48 +545,51 @@ fn pump_and_draw(
     });
 }
 
-fn request_texture_capture(
-    time: Res<Time<Real>>,
-    options: Res<Options>,
-    gate: Res<CaptureGate>,
-    mut state: ResMut<CaptureState>,
-    textures: Query<&TerminalTexture, With<Target>>,
-    commands: Commands,
-) {
-    if state.requested || !capture_due(&time, &options, &gate) {
+fn request_texture_capture(params: CaptureParams, textures: Query<&TerminalTexture, With<Target>>) {
+    let CaptureParams {
+        time,
+        options,
+        gate,
+        mut state,
+        terminal,
+        runtime,
+        commands,
+    } = params;
+    if state.requested || !terminal.is_measured() || !capture_due(&time, &options, &gate) {
         return;
     }
     let Ok(texture) = textures.single() else {
         return;
     };
     state.requested = true;
+    if options.diagnose {
+        diagnose(&terminal, &runtime);
+    }
     schedule_readback(commands, texture.image.clone(), texture.size);
 }
 
 #[derive(SystemParam)]
-struct SceneCaptureParams<'w, 's> {
+struct CaptureParams<'w, 's> {
     time: Res<'w, Time<Real>>,
     options: Res<'w, Options>,
     gate: Res<'w, CaptureGate>,
     state: ResMut<'w, CaptureState>,
-    target: Option<Res<'w, SceneTarget>>,
     terminal: Res<'w, TerminalSurface>,
     runtime: Res<'w, TerminalRuntime>,
     commands: Commands<'w, 's>,
 }
 
-fn request_scene_capture(params: SceneCaptureParams) {
-    let SceneCaptureParams {
+fn request_scene_capture(params: CaptureParams, target: Option<Res<SceneTarget>>) {
+    let CaptureParams {
         time,
         options,
         gate,
         mut state,
-        target,
         terminal,
         runtime,
         commands,
     } = params;
-    if state.requested || !capture_due(&time, &options, &gate) {
+    if state.requested || !terminal.is_measured() || !capture_due(&time, &options, &gate) {
         return;
     }
     let Some(target) = target else {
@@ -554,30 +613,134 @@ fn schedule_readback(mut commands: Commands, image: Handle<Image>, size: UVec2) 
                 return;
             }
             state.done = true;
-            write_png(&options.out, &done.data, size);
+            if let Err(error) = write_png(&options.out, &done.data, size) {
+                error!("failed to write {}: {error:#}", options.out.display());
+                state.failed = true;
+            }
         },
     );
 }
 
-fn exit_when_done(state: Res<CaptureState>, mut exit: MessageWriter<AppExit>) {
+fn exit_when_done(
+    mut state: ResMut<CaptureState>,
+    terminal: Res<TerminalSurface>,
+    time: Res<Time<Real>>,
+    options: Res<Options>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if !state.done
+        && !terminal.is_measured()
+        && time.elapsed_secs() >= options.timeout.max(options.after)
+    {
+        error!("terminal font measurement did not finish before the capture timeout");
+        state.done = true;
+        state.failed = true;
+    }
     if state.done {
-        exit.write(AppExit::Success);
+        exit.write(if state.failed {
+            AppExit::error()
+        } else {
+            AppExit::Success
+        });
+    }
+}
+
+/// A short-lived child still has a final frame to render. Defer the normal
+/// PTY-success exit until readback finishes, while preserving error exits.
+fn hold_scene_until_capture(
+    state: Res<CaptureState>,
+    runtime: Res<TerminalRuntime>,
+    mut exits: ResMut<Messages<AppExit>>,
+) {
+    if runtime.pty_disconnected && !state.done {
+        let errors: Vec<_> = exits
+            .drain()
+            .filter(|exit| matches!(exit, AppExit::Error(_)))
+            .collect();
+        exits.write_batch(errors);
     }
 }
 
 /// Writes padded RGBA8 readback rows as a PNG.
-fn write_png(path: &PathBuf, data: &[u8], size: UVec2) {
+fn write_png(path: &PathBuf, data: &[u8], size: UVec2) -> anyhow::Result<()> {
+    anyhow::ensure!(size.x > 0 && size.y > 0, "empty readback image");
     let unpadded = size.x as usize * 4;
     let stride = data.len() / size.y as usize;
+    anyhow::ensure!(
+        stride >= unpadded && data.len().is_multiple_of(size.y as usize),
+        "readback size mismatch for {size:?}"
+    );
     let mut pixels = Vec::with_capacity(unpadded * size.y as usize);
     for row in 0..size.y as usize {
         pixels.extend_from_slice(&data[row * stride..row * stride + unpadded]);
     }
-    match image::RgbaImage::from_raw(size.x, size.y, pixels) {
-        Some(image) => match image.save(path) {
-            Ok(()) => info!("wrote {}", path.display()),
-            Err(error) => error!("failed to write {}: {error}", path.display()),
-        },
-        None => error!("readback size mismatch for {:?}", size),
+    let image = image::RgbaImage::from_raw(size.x, size.y, pixels)
+        .ok_or_else(|| anyhow::anyhow!("readback size mismatch for {size:?}"))?;
+    image.save(path)?;
+    info!("wrote {}", path.display());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_terminal_ratatui::prelude::FontSource;
+
+    #[test]
+    fn texture_mode_measures_an_unavailable_family_using_fallback() {
+        let mut config = AppConfig::default();
+        config.font.family = "Ratty Missing Headless Test Font".to_string();
+        let terminal = TerminalSurface::new(&config).expect("terminal");
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin::default(),
+            bevy::text::TextPlugin,
+            TerminalPlugin,
+        ))
+        .init_asset::<Image>()
+        .add_systems(
+            Update,
+            sync_texture_font_config.before(TerminalSystems::Sync),
+        );
+        let faces = load_configured_font_faces(&mut app, &config.font).expect("font family");
+        app.insert_resource(faces);
+        let entity = app
+            .world_mut()
+            .spawn((
+                Target,
+                TerminalRenderer::new(terminal.tui.surface()),
+                terminal.render_config().clone(),
+            ))
+            .id();
+        for _ in 0..4 {
+            app.update();
+        }
+        let world = app.world();
+        assert_eq!(
+            world
+                .get::<TerminalRenderConfig>(entity)
+                .unwrap()
+                .font
+                .regular,
+            FontSource::Monospace
+        );
+        assert!(
+            world
+                .get::<TerminalTexture>(entity)
+                .expect("measured texture")
+                .cell_size
+                .cmpgt(Vec2::ONE)
+                .all()
+        );
+    }
+
+    #[test]
+    fn png_write_errors_propagate() {
+        let path = std::env::temp_dir();
+        // A directory cannot be saved as an image file.
+        assert!(write_png(&path, &[0; 4], UVec2::ONE).is_err());
+        assert!(write_png(&path, &[], UVec2::ONE).is_err());
+        assert!(write_png(&path, &[], UVec2::ZERO).is_err());
     }
 }

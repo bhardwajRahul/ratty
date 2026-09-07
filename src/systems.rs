@@ -62,7 +62,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::FontCx;
 use bevy::window::{PrimaryWindow, Window, WindowCloseRequested, WindowResized};
 use bevy_terminal_ratatui::prelude::{
-    FontFaces, FontSource, TerminalReady, TerminalRemeasured, TerminalRenderConfig, TerminalTexture,
+    TerminalReady, TerminalRemeasured, TerminalRenderConfig, TerminalTexture,
 };
 
 struct InlineLayout {
@@ -536,30 +536,19 @@ pub(crate) fn sync_terminal_renderer_config(
         return;
     }
     let mut desired = terminal.render_config().clone();
-    if let Some(ref configured_faces) = configured_faces {
-        desired.font = configured_faces.faces.clone();
-    }
-    // The family retained inside ConfiguredFontFaces is the one actually
-    // pushed to the renderer; None means explicit font files, where no
-    // availability check applies.
-    let system_family: Option<&str> = match configured_faces.as_deref() {
-        Some(configured) => configured.system_family.as_deref(),
-        None => Some(app_config.font.family.as_str()),
+    let default_faces;
+    let faces = match configured_faces.as_deref() {
+        Some(configured) => configured,
+        None => {
+            default_faces = ConfiguredFontFaces {
+                faces: desired.font.clone(),
+                system_family: Some(app_config.font.family.clone()),
+            };
+            &default_faces
+        }
     };
-    *in_family_fallback = false;
-    if let Some(family) = system_family
-        && font_cx
-            .bypass_change_detection()
-            .collection
-            .family_by_name(family)
-            .is_none()
-    {
-        warn_once!(
-            "configured font family {family:?} is unavailable; using the generic monospace family"
-        );
-        desired.font = FontFaces::regular(FontSource::Monospace);
-        *in_family_fallback = true;
-    }
+    desired.font = faces.resolve(font_cx.bypass_change_detection());
+    *in_family_fallback = desired.font != faces.faces;
     if *config != desired {
         config.clone_from(&desired);
     }
