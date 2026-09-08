@@ -20,7 +20,7 @@ use ratatui::widgets::Widget;
 
 use crate::config::{AppConfig, FontConfig, FontStyleConfig, ThemeConfig};
 use crate::mouse::TerminalSelection;
-use crate::ratty_vt::{Blink, Cell as VtCell, Color as VtColor, KITTY_PLACEHOLDER, Screen};
+use ratty_vt::{Blink, Cell as VtCell, Color as VtColor, KITTY_PLACEHOLDER, Screen};
 
 /// Terminal grid and presentation dimensions.
 #[derive(Clone, Copy, Debug)]
@@ -634,7 +634,7 @@ mod tests {
     use bevy_terminal_ratatui::prelude::{TerminalColor, TerminalSnapshot};
     use ratatui::buffer::{Cell, CellWidth};
 
-    use crate::ratty_vt::Parser;
+    use ratty_vt::Parser;
 
     fn parse(rows: u16, cols: u16, input: &[u8]) -> Parser {
         let mut parser = Parser::new(rows, cols, 1000);

@@ -1,3 +1,8 @@
+[workspace]
+members = [".", "crates/ratty-vt"]
+exclude = ["widget"]
+resolver = "3"
+
 [package]
 name = "ratty"
 version = "0.5.0"
@@ -10,7 +15,7 @@ repository = "https://github.com/orhun/ratty"
 keywords = ["terminal", "emulator", "3d", "graphics"]
 categories = ["command-line-utilities", "graphics"]
 edition = "2024"
-exclude = ["website/**", ".github/**", "widget/**", "src/ratty_vt/tests/data/**"]
+exclude = ["website/**", ".github/**", "widget/**", "crates/**", "scratchpad/**"]
 
 [dependencies]
 anyhow = "1.0"
@@ -42,27 +47,19 @@ bevy = { version = "0.19.0", default-features = false, features = [
     "zstd_rust",
 ] }
 clap = { version = "4.5", features = ["derive"] }
-compact_str = "0.9"
 etcetera = "0.11"
 image = { version = "0.25", default-features = false, features = ["png", "ico"] }
-itoa = "1.0"
 bevy_terminal_ratatui = { version = "0.7.3", default-features = false, features = ["system_fonts"] }
 portable-pty = "0.8"
 ratatui = "0.30"
+ratty-vt = { version = "0.1.0", path = "crates/ratty-vt" }
 rust-embed = "8.5"
 serde = { version = "1.0", features = ["derive"] }
 shellexpand = "3.1"
 stl_io = "0.11.0"
 tobj = "4.0"
 toml = "0.8"
-unicode-segmentation = "1.12"
-unicode-width = "0.2"
-vte = "0.15"
 winit = { version = "0.30", default-features = false }
-
-[dev-dependencies]
-quickcheck = "1.0"
-serde_json = "1.0"
 
 [build-dependencies]
 winresource = "0.1.31"

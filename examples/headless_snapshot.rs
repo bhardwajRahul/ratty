@@ -213,7 +213,7 @@ fn report_foreground_runs(runtime: &TerminalRuntime) {
     let screen = runtime.screen();
     let (rows, cols) = screen.size();
     for row in 0..rows {
-        let mut runs: Vec<(u16, ratty::ratty_vt::Color, String)> = Vec::new();
+        let mut runs: Vec<(u16, ratty_vt::Color, String)> = Vec::new();
         for col in 0..cols {
             let Some(cell) = screen.cell(row, col) else {
                 continue;

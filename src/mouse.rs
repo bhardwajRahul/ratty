@@ -14,10 +14,10 @@ use crate::camera::{
 };
 use crate::config::AppConfig;
 use crate::keyboard::enter_mobius_presentation;
-use crate::ratty_vt::{MouseProtocolEncoding, MouseProtocolMode, Screen};
 use crate::runtime::TerminalRuntime;
 use crate::scene::{MobiusTransition, TerminalPresentationMode, TerminalViewport};
 use crate::terminal::TerminalSurface;
+use ratty_vt::{MouseProtocolEncoding, MouseProtocolMode, Screen};
 
 /// Distance in pixels the pointer must move with a pending selection to start dragging.
 const SELECTION_DRAG_THRESHOLD: f32 = 4.0;
@@ -1004,7 +1004,7 @@ mod wheel_zoom_tests {
 mod tests {
     use super::*;
 
-    use crate::ratty_vt::Parser;
+    use ratty_vt::Parser;
 
     fn terminal(rows: u16, cols: u16, input: &str) -> Parser {
         let mut parser = Parser::new(rows, cols, 1000);

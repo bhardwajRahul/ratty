@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use bevy::render::render_resource::Extent3d;
 
-use crate::ratty_vt::{Cell, Color, Screen};
 use crate::terminal::TerminalSurface;
+use ratty_vt::{Cell, Color, Screen};
 
 type Rgba = [u8; 4];
 const DEBUG_BG: Rgba = [18, 20, 28, 255];
@@ -341,7 +341,7 @@ fn ansi_index_to_rgba(index: u8) -> Rgba {
 mod tests {
     use super::*;
 
-    use crate::ratty_vt::Parser;
+    use ratty_vt::Parser;
 
     /// A wide glyph that does not fit at the end of a row wraps and leaves
     /// the skipped cell blank; the debug image must not paint it as content.
