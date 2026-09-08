@@ -14,12 +14,12 @@ use crate::camera::{
 };
 use crate::config::{AppConfig, BindingAction, FontConfig, KeyBindingConfig};
 use crate::mouse::{TerminalSelection, encode_mouse_wheel};
-use crate::ratty_vt::MouseProtocolMode;
 use crate::runtime::TerminalRuntime;
 use crate::scene::{
     MobiusEnterZoomFloor, MobiusTransition, TerminalPlaneWarp, TerminalPresentationMode,
 };
 use crate::terminal::{TerminalRedrawState, TerminalSurface};
+use ratty_vt::MouseProtocolMode;
 
 /// Clipboard bridge for terminal copy and paste.
 pub struct TerminalClipboard {

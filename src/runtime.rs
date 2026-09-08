@@ -14,7 +14,7 @@ use bevy::prelude::Resource;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::config::AppConfig;
-use crate::ratty_vt::{Callbacks, Parser, Screen};
+use ratty_vt::{Callbacks, Parser, Screen};
 
 /// Command-line runtime overrides.
 #[derive(Debug, Clone, Default)]

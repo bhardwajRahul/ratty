@@ -10,12 +10,12 @@ use crate::kitty::{KittyOperation, KittyParserState, refresh_kitty_placeholder_a
 use crate::model::{
     ObjectLoadOptions, load_object_source_from_bytes_with_options, load_object_source_with_options,
 };
-use crate::ratty_vt::Screen;
 use crate::rgp::{
     RgpOperation, RgpPlacementStyle, RgpPlacementUpdate, RgpRegisterSource,
     consume_sequence as consume_rgp_sequence, support_reply,
 };
 use crate::runtime::TerminalRuntime;
+use ratty_vt::Screen;
 
 const APC_START: &[u8] = b"\x1b_";
 const ST: &[u8] = b"\x1b\\";

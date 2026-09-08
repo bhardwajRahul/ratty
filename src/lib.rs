@@ -17,7 +17,6 @@ pub mod mouse;
 pub mod paths;
 pub mod plugin;
 pub mod present;
-pub mod ratty_vt;
 pub mod rendering;
 pub mod rgp;
 pub mod runtime;

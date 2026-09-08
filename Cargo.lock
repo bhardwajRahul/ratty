@@ -4694,25 +4694,33 @@ dependencies = [
  "bevy",
  "bevy_terminal_ratatui",
  "clap",
- "compact_str",
  "etcetera",
  "image",
- "itoa",
  "portable-pty",
- "quickcheck",
  "ratatui",
+ "ratty-vt",
  "rust-embed",
  "serde",
- "serde_json",
  "shellexpand",
  "stl_io",
  "tobj",
  "toml 0.8.23",
+ "winit",
+ "winresource",
+]
+
+[[package]]
+name = "ratty-vt"
+version = "0.1.0"
+dependencies = [
+ "compact_str",
+ "itoa",
+ "quickcheck",
+ "serde",
+ "serde_json",
  "unicode-segmentation",
  "unicode-width",
  "vte",
- "winit",
- "winresource",
 ]
 
 [[package]]

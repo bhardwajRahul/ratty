@@ -76,10 +76,10 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run cargo check
-        run: cargo check --manifest-path ${{ matrix.manifest }} --target ${{ matrix.target }}
+        run: cargo check --workspace --locked --manifest-path ${{ matrix.manifest }} --target ${{ matrix.target }}
 
   test:
-    name: Test library
+    name: Test workspace
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -90,11 +90,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
-      - name: Run library tests
-        run: cargo test --lib --locked
+      - name: Run workspace tests and doctests
+        run: cargo test --workspace --locked
 
   package:
-    name: Package root crate
+    name: Package workspace crates
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
       - name: Verify package
-        run: cargo package --locked
+        run: cargo package --workspace --locked
 
   gpu-smoke:
     name: Headless renderer smoke
@@ -179,4 +179,4 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: cargo clippy --all-targets --manifest-path ${{ matrix.manifest }} -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked --manifest-path ${{ matrix.manifest }} -- -D warnings
